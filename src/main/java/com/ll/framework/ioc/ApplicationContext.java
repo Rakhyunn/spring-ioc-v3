@@ -10,7 +10,9 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class ApplicationContext {
@@ -30,6 +32,11 @@ public class ApplicationContext {
             File directory = new File(resource.toURI());
 
             scanDirectory(directory, basePackage);  // 탐색 시작
+            // 클래스 bean 생성 후 메서드 bean 생성
+            List<Object> curBeans = new ArrayList<>(beans.values());
+            for(Object bean : curBeans) {
+                createMethodBean(bean.getClass());
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -52,7 +59,6 @@ public class ApplicationContext {
                         if (beans.get(beanName) == null) {
                             Object bean = createBean(clazz);
                             beans.put(beanName, bean);
-                            createMethodBean(clazz);
                         }
                         System.out.println("Bean 등록: " + beanName);
                     }
@@ -120,13 +126,32 @@ public class ApplicationContext {
                     if(beans.get(method.getName()) != null) continue;
                     // 필요 파라미터 탐색
                     Parameter[] parameters = method.getParameters();
+                    Object instance = beans.get(Ut.str.lcfirst(clazz.getSimpleName()));
                     if(parameters.length == 0) {    // 필요 파라미터가 없는 경우
-                        // 해당 클래스의 인스터스를 가져와 메서드를 invoke하여 객체 생성 및 컨테이너 등록
-                        Object instance = beans.get(Ut.str.lcfirst(clazz.getSimpleName()));
+                        // 해당 메서드를 invoke하여 객체 생성 및 컨테이너 등록
                         Object bean = method.invoke(instance);
                         beans.put(method.getName(), bean);
+                    } else {    // 필요 파라미터가 있는 경우
+                        // 의존성 주입을 위한 Object 배열
+                        Object[] args = new Object[parameters.length];
+                        for(int i = 0; i < parameters.length; i++) {
+                            // 파라미터 매개변수 이름으로 beans 조회 후 없으면 재귀적으로 생성
+                            String name = parameters[i].getName();
+                            Object bean = beans.get(name);
+                            if (bean == null) {
+                                // 재귀적으로 생성하여 bean에 대입
+                                createMethodBean(parameters[i].getType());
+                                bean = beans.get(name);
+                            }
+                            // 생성된 bean을 args 배열에 저장
+                            args[i] = bean;
+                        }
+                        // args를 이용하여 해당 메서드를 invoke하여 객체 생성 및 컨테이너 등록
+                        Object methodBean = method.invoke(instance, args);
+                        beans.put(method.getName(), methodBean);
                     }
                 }
+                System.out.println("Method Bean 등록 : " + method.getName());
             }
         } catch (Exception e) {
             e.printStackTrace();
