@@ -1,11 +1,13 @@
 package com.ll.framework.ioc;
 
+import com.ll.framework.ioc.annotations.Bean;
 import com.ll.framework.ioc.annotations.Component;
 import com.ll.standard.util.Ut;
 
 import java.io.File;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.net.URL;
 import java.util.HashMap;
@@ -50,6 +52,7 @@ public class ApplicationContext {
                         if (beans.get(beanName) == null) {
                             Object bean = createBean(clazz);
                             beans.put(beanName, bean);
+                            createMethodBean(clazz);
                         }
                         System.out.println("Bean 등록: " + beanName);
                     }
@@ -102,6 +105,31 @@ public class ApplicationContext {
         } catch (Exception e) {
             e.printStackTrace();
             return null;
+        }
+    }
+
+    // 메서드 bean 객체 생성 메서드
+    private void createMethodBean(Class<?> clazz) {
+        try {
+            // 메서드 탐색
+            Method[] methods = clazz.getDeclaredMethods();
+            for(Method method : methods) {
+                // Bean 어노테이션 체크
+                if(method.isAnnotationPresent(Bean.class)) {
+                    // 이미 컨테이너에 있으면 생성하지 않음
+                    if(beans.get(method.getName()) != null) continue;
+                    // 필요 파라미터 탐색
+                    Parameter[] parameters = method.getParameters();
+                    if(parameters.length == 0) {    // 필요 파라미터가 없는 경우
+                        // 해당 클래스의 인스터스를 가져와 메서드를 invoke하여 객체 생성 및 컨테이너 등록
+                        Object instance = beans.get(Ut.str.lcfirst(clazz.getSimpleName()));
+                        Object bean = method.invoke(instance);
+                        beans.put(method.getName(), bean);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
